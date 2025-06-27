@@ -3,7 +3,7 @@ import os
 import random
 import sys
 import re
-import string
+import string 
 import string as rohit
 import time
 from datetime import datetime, timedelta
@@ -59,102 +59,97 @@ async def start_command(client: Client, message: Message):
     else:
         verify_status = await db.get_verify_status(id)
 
-        # NOW check token verification (only after force sub is satisfied)
-        if SHORTLINK_URL or SHORTLINK_API:
-            # Fix: Ensure verified_time is a number before comparison
-            verified_time = verify_status.get('verified_time', 0)
+        # Token verification handling
+        if "verify_" in message.text:
             try:
-                verified_time = float(verified_time) if verified_time else 0
-            except (ValueError, TypeError):
-                verified_time = 0
-
-            if verify_status['is_verified'] and VERIFY_EXPIRE < (time.time() - verified_time):
-                await db.update_verify_status(user_id, is_verified=False)
-
-            # --------- REPLACEMENT: Token Verification ---------
-            # Check if this is a verification request
-            if len(message.command) > 1 and message.command[1].startswith("verify_"):
-                # Extract token from command parameters
-                full_param = message.command[1]  # Gets "verify_TOKEN"
-                token = full_param.replace("verify_", "", 1)  # Gets just the TOKEN part
+                _, token = message.text.split("_", 1)
+                current_token = verify_status.get('verify_token', '')
                 
-                # Debug logging (remove after fixing)
-                print(f"DEBUG: Extracted token: '{token}'")
-                print(f"DEBUG: Stored token: '{verify_status.get('verify_token', 'None')}'")
-                print(f"DEBUG: Full verify status: {verify_status}")
-                
-                # Check if token matches
-                stored_token = verify_status.get('verify_token', '')
-                if stored_token != token:
+                # Check if token matches and is not expired
+                if current_token and current_token == token:
+                    # Check if token is expired (only if VERIFY_EXPIRE is enabled)
+                    if VERIFY_EXPIRE > 0:
+                        verified_time = verify_status.get('verified_time', 0)
+                        try:
+                            verified_time = float(verified_time) if verified_time else 0
+                        except (ValueError, TypeError):
+                            verified_time = 0
+                        
+                        if time.time() - verified_time > VERIFY_EXPIRE:
+                            await db.update_verify_status(user_id, is_verified=False)
+                            raise ValueError("Token expired")
+                    
+                    # Token is valid, update verification status
+                    await db.update_verify_status(id, is_verified=True, verified_time=time.time())
+                    current = await db.get_verify_count(id)
+                    await db.set_verify_count(id, current + 1)
+                    
+                    reply_text = f"✅ Your token has been successfully verified!"
+                    if VERIFY_EXPIRE > 0:
+                        reply_text += f"\n\nValid for: {get_exp_time(VERIFY_EXPIRE)}"
+                        
                     return await message.reply(
-                        "❌ Your token is invalid or expired.\n"
-                        "Try again by clicking /start.\n\n"
-                        f"🔍 Debug: Expected '{stored_token}', got '{token}'"
+                        reply_text,
+                        protect_content=False,
+                        quote=True
                     )
+                else:
+                    raise ValueError("Invalid token")
+                    
+            except ValueError as e:
+                # Generate new token if expired or invalid
+                token = ''.join(random.choices(rohit.ascii_letters + rohit.digits, k=12))  # Increased to 12 chars for better security
+                await db.update_verify_status(id, verify_token=token, link="")
+                link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, f'https://telegram.dog/{client.username}?start=verify_{token}')
                 
-                # Token is valid, update verification status
-                success = await db.update_verify_status(
-                    id, 
-                    is_verified=True, 
-                    verified_time=time.time(),
-                    verify_token=""  # Clear the token after successful verification
-                )
-                
-                if not success:
-                    return await message.reply("❌ Error updating verification status. Please try again.")
-                
-                # Update verify count
-                current = await db.get_verify_count(id)
-                await db.set_verify_count(id, current + 1)
-                
-                # Success message
-                return await message.reply(
-                    f"✅ Your token has been successfully verified!\n"
-                    f"Valid for: {get_exp_time(VERIFY_EXPIRE)}",
-                    protect_content=False,
-                    quote=True
-                )
-
-            # --------- REPLACEMENT: Token Generation ---------
-            if not verify_status['is_verified'] and not is_premium:
-                # Generate a new token
-                token = ''.join(random.choices(rohit.ascii_letters + rohit.digits, k=10))
-                
-                # Debug logging (remove after fixing)
-                print(f"DEBUG: Generated new token: '{token}' for user {id}")
-                
-                # Update verification status with new token
-                success = await db.update_verify_status(
-                    id, 
-                    verify_token=token, 
-                    link="", 
-                    is_verified=False  # Ensure user is marked as unverified
-                )
-                
-                if not success:
-                    return await message.reply("❌ Error generating verification token. Please try again.")
-                
-                # Generate the verification link
-                verification_url = f'https://telegram.dog/{client.username}?start=verify_{token}'
-                link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, verification_url)
-                
-                # Debug logging (remove after fixing)
-                print(f"DEBUG: Generated verification URL: {verification_url}")
-                print(f"DEBUG: Shortened link: {link}")
-
                 btn = [
                     [InlineKeyboardButton("• ᴏᴘᴇɴ ʟɪɴᴋ •", url=link), 
-                    InlineKeyboardButton('• ᴛᴜᴛᴏʀɪᴀʟ •', url=TUT_VID)],
+                     InlineKeyboardButton('• ᴛᴜᴛᴏʀɪᴀʟ •', url=TUT_VID)],
                     [InlineKeyboardButton('• ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ •', callback_data='premium')]
                 ]
+                
+                error_msg = f"❌ {str(e)}. Please refresh your token to continue."
+                if str(e) == "Token expired":
+                    error_msg = f"⚠️ Your token has expired. Please refresh to continue."
+                    
                 return await message.reply(
-                    f"𝗬𝗼𝘂𝗿 𝘁𝗼𝗸𝗲𝗻 𝗵𝗮𝘀 𝗲𝘅𝗽𝗶𝗿𝗲𝗱. 𝗣𝗹𝗲𝗮𝘀𝗲 𝗿𝗲𝗳𝗿𝗲𝘀𝗵 𝘆𝗼𝘂𝗿 𝘁𝗼𝗸𝗲𝗻 𝘁𝗼 𝗰𝗼𝗻𝘁𝗶𝗻𝘂𝗲..\n\n<b>Tᴏᴋᴇɴ Tɪᴍᴇᴏᴜᴛ:</b> {get_exp_time(VERIFY_EXPIRE)}\n\n<b>ᴡʜᴀᴛ ɪs ᴛʜᴇ ᴛᴏᴋᴇɴ??</b>\n\nᴛʜɪs ɪs ᴀɴ ᴀᴅs ᴛᴏᴋᴇɴ. ᴘᴀssɪɴɢ ᴏɴᴇ ᴀᴅ ᴀʟʟᴏᴡs ʏᴏᴜ ᴛᴏ ᴜsᴇ ᴛʜᴇ ʙᴏᴛ ғᴏʀ {get_exp_time(VERIFY_EXPIRE)}</b>",
+                    f"{error_msg}\n\n"
+                    f"<b>Token Timeout:</b> {get_exp_time(VERIFY_EXPIRE)}\n\n"
+                    f"<b>What is the token?</b>\n\n"
+                    f"This is an ads token. Passing one ad allows you to use the bot for {get_exp_time(VERIFY_EXPIRE)}",
                     reply_markup=InlineKeyboardMarkup(btn),
                     protect_content=False,
                     quote=True
                 )
 
-    # File auto-delete time in seconds - Fix: Ensure it's an integer
+            # NOW check token verification (only after force sub is satisfied)
+            if SHORTLINK_URL or SHORTLINK_API:
+                verified_time = verify_status.get('verified_time', 0)
+                try:
+                    verified_time = float(verified_time) if verified_time else 0
+                except (ValueError, TypeError):
+                    verified_time = 0
+
+                if verify_status['is_verified'] and VERIFY_EXPIRE < (time.time() - verified_time):
+                    await db.update_verify_status(user_id, is_verified=False)
+
+                if not verify_status['is_verified'] and not is_premium:
+                    token = ''.join(random.choices(rohit.ascii_letters + rohit.digits, k=12))  # Increased to 12 chars
+                    await db.update_verify_status(id, verify_token=token, link="")
+                    link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, f'https://telegram.dog/{client.username}?start=verify_{token}')
+                    btn = [
+                        [InlineKeyboardButton("• ᴏᴘᴇɴ ʟɪɴᴋ •", url=link), 
+                        InlineKeyboardButton('• ᴛᴜᴛᴏʀɪᴀʟ •', url=TUT_VID)],
+                        [InlineKeyboardButton('• ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ •', callback_data='premium')]
+                    ]
+                    return await message.reply(
+                        f"𝗬𝗼𝘂𝗿 𝘁𝗼𝗸𝗲𝗻 𝗵𝗮𝘀 𝗲𝘅𝗽𝗶𝗿𝗲𝗱. 𝗣𝗹𝗲𝗮𝘀𝗲 𝗿𝗲𝗳𝗿𝗲𝘀𝗵 𝘆𝗼𝘂𝗿 𝘁𝗼𝗸𝗲𝗻 𝘁𝗼 𝗰𝗼𝗻𝘁𝗶𝗻𝘂𝗲..\n\n<b>Tᴏᴋᴇɴ Tɪᴍᴇᴏᴜᴛ:</b> {get_exp_time(VERIFY_EXPIRE)}\n\n<b>ᴡʜᴀᴛ ɪs ᴛʜᴇ ᴛᴏᴸᴇɴ??</b>\n\nᴛʜɪs ɪs ᴀɴ ᴀᴅs ᴛᴏᴋᴇɴ. ᴘᴀssɪɴɢ ᴏɴᴇ ᴀᴅ ᴀʟʟᴏᴡs ʏᴏᴜ ᴛᴏ ᴜsᴇ ᴛʜᴇ ʙᴏᴛ ғᴏʀ {get_exp_time(VERIFY_EXPIRE)}</b>",
+                        reply_markup=InlineKeyboardMarkup(btn),
+                        protect_content=False,
+                        quote=True
+                    )
+
+    # File auto-delete time in seconds
     try:
         FILE_AUTO_DELETE = await db.get_del_timer()
         FILE_AUTO_DELETE = int(FILE_AUTO_DELETE) if FILE_AUTO_DELETE else 0
@@ -243,7 +238,7 @@ async def start_command(client: Client, message: Message):
 
             try:
                 reload_url = (
-                    f"<https://t.me/{client.username}?start={message.command>[1]}"
+                    f"https://t.me/{client.username}?start={message.command[1]}"
                     if message.command and len(message.command) > 1
                     else None
                 )
@@ -353,7 +348,7 @@ async def not_joined(client: Client, message: Message):
             buttons.append([
                 InlineKeyboardButton(
                     text='♻️ Tʀʏ Aɢᴀɪɴ',
-                    url=f"<https://t.me/{client.username}?start={message.command>[1]}" if message.command and len(message.command) > 1 else f"https://t.me/{client.username}"
+                    url=f"https://t.me/{client.username}?start={message.command[1]}" if message.command and len(message.command) > 1 else f"https://t.me/{client.username}"
                 )
             ])
         except IndexError:
