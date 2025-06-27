@@ -47,6 +47,7 @@ class Yae_X_Miko:
         self.rqst_fsub_Channel_data = self.database['request_forcesub_channel']
         
 
+
     # USER DATA
     async def present_user(self, user_id: int):
         found = await self.user_data.find_one({'_id': user_id})
@@ -64,6 +65,7 @@ class Yae_X_Miko:
     async def del_user(self, user_id: int):
         await self.user_data.delete_one({'_id': user_id})
         return
+
 
     # ADMIN DATA
     async def admin_exist(self, admin_id: int):
@@ -85,6 +87,7 @@ class Yae_X_Miko:
         user_ids = [doc['_id'] for doc in users_docs]
         return user_ids
 
+
     # BAN USER DATA
     async def ban_user_exist(self, user_id: int):
         found = await self.banned_user_data.find_one({'_id': user_id})
@@ -105,6 +108,8 @@ class Yae_X_Miko:
         user_ids = [doc['_id'] for doc in users_docs]
         return user_ids
 
+
+
     # AUTO DELETE TIMER SETTINGS
     async def set_del_timer(self, value: int):        
         existing = await self.del_timer_data.find_one({})
@@ -118,6 +123,7 @@ class Yae_X_Miko:
         if data:
             return data.get('value', 600)
         return 0
+
 
     # CHANNEL MANAGEMENT
     async def channel_exist(self, channel_id: int):
@@ -139,7 +145,8 @@ class Yae_X_Miko:
         channel_ids = [doc['_id'] for doc in channel_docs]
         return channel_ids
 
-    # Get current mode of a channel
+    
+# Get current mode of a channel
     async def get_channel_mode(self, channel_id: int):
         data = await self.fsub_data.find_one({'_id': channel_id})
         return data.get("mode", "off") if data else "off"
@@ -152,163 +159,126 @@ class Yae_X_Miko:
             upsert=True
         )
 
-    # REQUEST FORCE SUB FUNCTIONS
-    async def reqChannel_exist(self, channel_id: int):
-        found = await self.rqst_fsub_Channel_data.find_one({'channel_id': channel_id})
-        return bool(found)
+    # REQUEST FORCE-SUB MANAGEMENT
 
-    async def add_reqChannel(self, channel_id: int):
-        if not await self.reqChannel_exist(channel_id):
-            await self.rqst_fsub_Channel_data.insert_one({'channel_id': channel_id})
-
-    async def del_reqChannel(self, channel_id: int):
-        if await self.reqChannel_exist(channel_id):
-            await self.rqst_fsub_Channel_data.delete_one({'channel_id': channel_id})
-
-    async def req_user_exist(self, channel_id: int, user_id: int):
-        found = await self.rqst_fsub_data.find_one({'channel_id': channel_id, 'user_id': user_id})
-        return bool(found)
-
+    # Add the user to the set of users for a   specific channel
     async def req_user(self, channel_id: int, user_id: int):
-        if not await self.req_user_exist(channel_id, user_id):
-            await self.rqst_fsub_data.insert_one({'channel_id': channel_id, 'user_id': user_id})
+        try:
+            await self.rqst_fsub_Channel_data.update_one(
+                {'_id': int(channel_id)},
+                {'$addToSet': {'user_ids': int(user_id)}},
+                upsert=True
+            )
+        except Exception as e:
+            print(f"[DB ERROR] Failed to add user to request list: {e}")
 
+
+    # Method 2: Remove a user from the channel set
     async def del_req_user(self, channel_id: int, user_id: int):
-        if await self.req_user_exist(channel_id, user_id):
-            await self.rqst_fsub_data.delete_one({'channel_id': channel_id, 'user_id': user_id})
+        # Remove the user from the set of users for the channel
+        await self.rqst_fsub_Channel_data.update_one(
+            {'_id': channel_id}, 
+            {'$pull': {'user_ids': user_id}}
+        )
 
-    # VERIFICATION SYSTEM - FIXED VERSION
-    async def get_verify_status(self, user_id: int):
-        """Get verification status for a user with proper error handling"""
+    # Check if the user exists in the set of the channel's users
+    async def req_user_exist(self, channel_id: int, user_id: int):
         try:
-            default = {
-                'is_verified': False,
-                'verified_time': 0,
-                'verify_token': "",
-                'link': ""
-            }
-            
-            data = await self.sex_data.find_one({'user_id': user_id})
-            if data:
-                # Return the stored data or default values if keys are missing
-                return {
-                    'is_verified': data.get('is_verified', False),
-                    'verified_time': data.get('verified_time', 0),
-                    'verify_token': data.get('verify_token', ""),
-                    'link': data.get('link', "")
-                }
-            else:
-                # Create new user with default values
-                await self.sex_data.insert_one({
-                    'user_id': user_id,
-                    **default
-                })
-                return default
+            found = await self.rqst_fsub_Channel_data.find_one({
+                '_id': int(channel_id),
+                'user_ids': int(user_id)
+            })
+            return bool(found)
         except Exception as e:
-            logging.error(f"Error getting verify status for user {user_id}: {e}")
-            return default_verify
+            print(f"[DB ERROR] Failed to check request list: {e}")
+            return False  
 
-    async def update_verify_status(self, user_id: int, **kwargs):
-        """Update verification status with proper error handling and logging"""
-        try:
-            # Add debug logging
-            logging.info(f"Updating verify status for user {user_id}: {kwargs}")
-            
-            # Ensure we're updating the right fields
-            update_data = {}
-            for key, value in kwargs.items():
-                if key in ['is_verified', 'verified_time', 'verify_token', 'link']:
-                    update_data[key] = value
-            
-            # Upsert the document
-            result = await self.sex_data.update_one(
-                {'user_id': user_id},
-                {'$set': update_data},
-                upsert=True
-            )
-            
-            # Log the result
-            if result.upserted_id:
-                logging.info(f"Created new verify record for user {user_id}")
-            elif result.modified_count > 0:
-                logging.info(f"Updated verify record for user {user_id}")
-            else:
-                logging.warning(f"No changes made to verify record for user {user_id}")
-                
+
+    # Method to check if a channel exists using show_channels
+    async def reqChannel_exist(self, channel_id: int):
+    # Get the list of all channel IDs from the database
+        channel_ids = await self.show_channels()
+        #print(f"All channel IDs in the database: {channel_ids}")
+
+    # Check if the given channel_id is in the list of channel IDs
+        if channel_id in channel_ids:
+            #print(f"Channel {channel_id} found in the database.")
             return True
-        except Exception as e:
-            logging.error(f"Error updating verify status for user {user_id}: {e}")
+        else:
+            #print(f"Channel {channel_id} NOT found in the database.")
             return False
 
-    async def get_verify_count(self, user_id: int):
-        """Get verification count for a user"""
-        try:
-            data = await self.sex_data.find_one({'user_id': user_id})
-            if data:
-                return data.get('verify_count', 0)
-            return 0
-        except Exception as e:
-            logging.error(f"Error getting verify count for user {user_id}: {e}")
-            return 0
 
+
+    # VERIFICATION MANAGEMENT
+    async def db_verify_status(self, user_id):
+        user = await self.user_data.find_one({'_id': user_id})
+        if user:
+            return user.get('verify_status', default_verify)
+        return default_verify
+
+    async def db_update_verify_status(self, user_id, verify):
+        await self.user_data.update_one({'_id': user_id}, {'$set': {'verify_status': verify}})
+
+    async def get_verify_status(self, user_id):
+        verify = await self.db_verify_status(user_id)
+        return verify
+
+    async def update_verify_status(self, user_id, verify_token="", is_verified=False, verified_time=0, link=""):
+        current = await self.db_verify_status(user_id)
+        current['verify_token'] = verify_token
+        current['is_verified'] = is_verified
+        current['verified_time'] = verified_time
+        current['link'] = link
+        await self.db_update_verify_status(user_id, current)
+
+    # Set verify count (overwrite with new value)
     async def set_verify_count(self, user_id: int, count: int):
-        """Set verification count for a user"""
-        try:
-            await self.sex_data.update_one(
-                {'user_id': user_id},
-                {'$set': {'verify_count': count}},
-                upsert=True
-            )
-            return True
-        except Exception as e:
-            logging.error(f"Error setting verify count for user {user_id}: {e}")
-            return False
+        await self.sex_data.update_one({'_id': user_id}, {'$set': {'verify_count': count}}, upsert=True)
 
+    # Get verify count (default to 0 if not found)
+    async def get_verify_count(self, user_id: int):
+        user = await self.sex_data.find_one({'_id': user_id})
+        if user:
+            return user.get('verify_count', 0)
+        return 0
+
+    # Reset all users' verify counts to 0
     async def reset_all_verify_counts(self):
-        """Reset verification counts for all users"""
-        try:
-            result = await self.sex_data.update_many(
-                {},
-                {'$set': {'verify_count': 0}}
-            )
-            logging.info(f"Reset verify counts for {result.modified_count} users")
-            return result.modified_count
-        except Exception as e:
-            logging.error(f"Error resetting verify counts: {e}")
-            return 0
+        await self.sex_data.update_many(
+            {},
+            {'$set': {'verify_count': 0}} 
+        )
 
-    # DEBUG FUNCTIONS - ADD THESE FOR TROUBLESHOOTING
-    async def debug_verify_status(self, user_id: int):
-        """Debug function to check verification status"""
-        try:
-            data = await self.sex_data.find_one({'user_id': user_id})
-            logging.info(f"Debug verify status for user {user_id}: {data}")
-            return data
-        except Exception as e:
-            logging.error(f"Error in debug verify status: {e}")
-            return None
+    # Get total verify count across all users
+    async def get_total_verify_count(self):
+        pipeline = [
+            {"$group": {"_id": None, "total": {"$sum": "$verify_count"}}}
+        ]
+        result = await self.sex_data.aggregate(pipeline).to_list(length=1)
+        return result[0]["total"] if result else 0
 
-    async def cleanup_invalid_verify_tokens(self):
-        """Clean up invalid or expired verification tokens"""
-        try:
-            current_time = time.time()
-            # Remove tokens older than VERIFY_EXPIRE
-            from config import VERIFY_EXPIRE
-            cutoff_time = current_time - VERIFY_EXPIRE
-            
-            result = await self.sex_data.update_many(
-                {
-                    'verified_time': {'$lt': cutoff_time},
-                    'is_verified': True
-                },
-                {'$set': {'is_verified': False, 'verify_token': ""}}
-            )
-            
-            logging.info(f"Cleaned up {result.modified_count} expired verification tokens")
-            return result.modified_count
-        except Exception as e:
-            logging.error(f"Error cleaning up verify tokens: {e}")
-            return 0
+    # Store invite link for a channel
+    async def store_invite_link(self, channel_id: int, invite_link: str, expire_date: int = None):
+        await self.fsub_data.update_one(
+            {'_id': channel_id},
+            {'$set': {
+                'invite_link': invite_link,
+                'link_expire_date': expire_date
+            }},
+            upsert=True
+        )
 
-# Create database instance
+    # Get stored invite link for a channel
+    async def get_invite_link(self, channel_id: int):
+        data = await self.fsub_data.find_one({'_id': channel_id})
+        if data and 'invite_link' in data:
+            # Check if link has expired
+            if data.get('link_expire_date'):
+                if int(time.time()) >= data['link_expire_date']:
+                    return None
+            return data['invite_link']
+        return None
+
+
 db = Yae_X_Miko(DB_URI, DB_NAME)
