@@ -14,7 +14,7 @@ CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1002583602391")) #Your db channe
 OWNER = os.environ.get("OWNER", "Mikoyae756") # Owner username without @
 OWNER_ID = int(os.environ.get("OWNER_ID", "7970350353")) # Owner id
 #--------------------------------------------
-PORT = os.environ.get("PORT", "3220")
+PORT = os.environ.get("PORT", "1920")
 #--------------------------------------------
 DB_URI = os.environ.get("DATABASE_URL", "mongodb+srv://ZeroTwo:aloksingh@zerotwo.3q3ij.mongodb.net/?retryWrites=true&w=majority")
 DB_NAME = os.environ.get("DATABASE_NAME", "ZeroTwo")
