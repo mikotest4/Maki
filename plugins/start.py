@@ -3,7 +3,7 @@ import os
 import random
 import sys
 import re
-import string 
+import string
 import string as rohit
 import time
 from datetime import datetime, timedelta
@@ -71,27 +71,77 @@ async def start_command(client: Client, message: Message):
             if verify_status['is_verified'] and VERIFY_EXPIRE < (time.time() - verified_time):
                 await db.update_verify_status(user_id, is_verified=False)
 
-            if "verify_" in message.text:
-                _, token = message.text.split("_", 1)
-                if verify_status['verify_token'] != token:
-                    return await message.reply("Your token is invalid or expired. Try again by clicking /start.")
-                await db.update_verify_status(id, is_verified=True, verified_time=time.time())
+            # --------- REPLACEMENT: Token Verification ---------
+            # Check if this is a verification request
+            if len(message.command) > 1 and message.command[1].startswith("verify_"):
+                # Extract token from command parameters
+                full_param = message.command[1]  # Gets "verify_TOKEN"
+                token = full_param.replace("verify_", "", 1)  # Gets just the TOKEN part
                 
+                # Debug logging (remove after fixing)
+                print(f"DEBUG: Extracted token: '{token}'")
+                print(f"DEBUG: Stored token: '{verify_status.get('verify_token', 'None')}'")
+                print(f"DEBUG: Full verify status: {verify_status}")
+                
+                # Check if token matches
+                stored_token = verify_status.get('verify_token', '')
+                if stored_token != token:
+                    return await message.reply(
+                        "❌ Your token is invalid or expired.\n"
+                        "Try again by clicking /start.\n\n"
+                        f"🔍 Debug: Expected '{stored_token}', got '{token}'"
+                    )
+                
+                # Token is valid, update verification status
+                success = await db.update_verify_status(
+                    id, 
+                    is_verified=True, 
+                    verified_time=time.time(),
+                    verify_token=""  # Clear the token after successful verification
+                )
+                
+                if not success:
+                    return await message.reply("❌ Error updating verification status. Please try again.")
+                
+                # Update verify count
                 current = await db.get_verify_count(id)
                 await db.set_verify_count(id, current + 1)
-                if verify_status["link"] == "":
-                    reply_markup = None
+                
+                # Success message
                 return await message.reply(
-                    f"Your token has been successfully verified and is valid for {get_exp_time(VERIFY_EXPIRE)}",
-                    reply_markup=reply_markup,
+                    f"✅ Your token has been successfully verified!\n"
+                    f"Valid for: {get_exp_time(VERIFY_EXPIRE)}",
                     protect_content=False,
                     quote=True
                 )
 
+            # --------- REPLACEMENT: Token Generation ---------
             if not verify_status['is_verified'] and not is_premium:
+                # Generate a new token
                 token = ''.join(random.choices(rohit.ascii_letters + rohit.digits, k=10))
-                await db.update_verify_status(id, verify_token=token, link="")
-                link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, f'https://telegram.dog/{client.username}?start=verify_{token}')
+                
+                # Debug logging (remove after fixing)
+                print(f"DEBUG: Generated new token: '{token}' for user {id}")
+                
+                # Update verification status with new token
+                success = await db.update_verify_status(
+                    id, 
+                    verify_token=token, 
+                    link="", 
+                    is_verified=False  # Ensure user is marked as unverified
+                )
+                
+                if not success:
+                    return await message.reply("❌ Error generating verification token. Please try again.")
+                
+                # Generate the verification link
+                verification_url = f'https://telegram.dog/{client.username}?start=verify_{token}'
+                link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, verification_url)
+                
+                # Debug logging (remove after fixing)
+                print(f"DEBUG: Generated verification URL: {verification_url}")
+                print(f"DEBUG: Shortened link: {link}")
+
                 btn = [
                     [InlineKeyboardButton("• ᴏᴘᴇɴ ʟɪɴᴋ •", url=link), 
                     InlineKeyboardButton('• ᴛᴜᴛᴏʀɪᴀʟ •', url=TUT_VID)],
@@ -193,7 +243,7 @@ async def start_command(client: Client, message: Message):
 
             try:
                 reload_url = (
-                    f"https://t.me/{client.username}?start={message.command[1]}"
+                    f"<https://t.me/{client.username}?start={message.command>[1]}"
                     if message.command and len(message.command) > 1
                     else None
                 )
@@ -303,7 +353,7 @@ async def not_joined(client: Client, message: Message):
             buttons.append([
                 InlineKeyboardButton(
                     text='♻️ Tʀʏ Aɢᴀɪɴ',
-                    url=f"https://t.me/{client.username}?start={message.command[1]}" if message.command and len(message.command) > 1 else f"https://t.me/{client.username}"
+                    url=f"<https://t.me/{client.username}?start={message.command>[1]}" if message.command and len(message.command) > 1 else f"https://t.me/{client.username}"
                 )
             ])
         except IndexError:
