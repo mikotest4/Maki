@@ -28,7 +28,7 @@ FORCE_PIC = os.environ.get("FORCE_PIC", "https://telegra.ph/file/e159ff1c9c3e076
 #--------------------------------------------
 SHORTLINK_URL = os.environ.get("SHORTLINK_URL", "shortner.in")
 SHORTLINK_API = os.environ.get("SHORTLINK_API", "ad712c005fcde851b4a3a5b1ee5f96171db6ebd2")
-VERIFY_EXPIRE = int(os.environ.get('VERIFY_EXPIRE', "86400")) # Add time in seconds
+VERIFY_EXPIRE = int(os.environ.get('VERIFY_EXPIRE', "100")) # Add time in seconds
 TUT_VID = os.environ.get("TUT_VID","https://t.me/+yReU8NWVB-s3YzNl")
 
 #--------------------------------------------
