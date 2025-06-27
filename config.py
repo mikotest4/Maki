@@ -5,18 +5,18 @@ from logging.handlers import RotatingFileHandler
 
 #--------------------------------------------
 #Bot token @Botfather
-TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "7243277226:AAEnhyE200CQZn2CbYo110Q-iJlPDxzspE0")
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "7540338860:AAH-6AgLnnaC3IEb8-PTKRDyfMEBCeDEing")
 APP_ID = int(os.environ.get("APP_ID", "28614709")) #Your API ID from my.telegram.org
 API_HASH = os.environ.get("API_HASH", "f36fd2ee6e3d3a17c4d244ff6dc1bac8") #Your API Hash from my.telegram.org
 #--------------------------------------------
 
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1002756451919")) #Your db channel Id
-OWNER = os.environ.get("OWNER", "Yae_X_Miko") # Owner username without @
-OWNER_ID = int(os.environ.get("OWNER_ID", "8108281129")) # Owner id
+CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1002583602391")) #Your db channel Id
+OWNER = os.environ.get("OWNER", "Mikoyae756") # Owner username without @
+OWNER_ID = int(os.environ.get("OWNER_ID", "7970350353")) # Owner id
 #--------------------------------------------
-PORT = os.environ.get("PORT", "3050")
+PORT = os.environ.get("PORT", "3220")
 #--------------------------------------------
-DB_URI = os.environ.get("DATABASE_URL", "mongodb+srv://ZeroTwo:aloksingh@zerotwo.3q3ij.mongodb.net/?retryWrites=true&w=majority&appName=ZeroTwo")
+DB_URI = os.environ.get("DATABASE_URL", "mongodb+srv://ZeroTwo:aloksingh@zerotwo.3q3ij.mongodb.net/?retryWrites=true&w=majority")
 DB_NAME = os.environ.get("DATABASE_NAME", "ZeroTwo")
 #--------------------------------------------
 BAN_SUPPORT = os.environ.get("BAN_SUPPORT", None)
